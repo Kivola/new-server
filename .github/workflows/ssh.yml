@@ -1,38 +1,48 @@
-name: Server Configuration via SSH
+name: Server Configuration via SSH (Password)
 
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Are you sure you want to configure the server? (type 'yes')"
+        required: true
+        default: "no"
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     
     steps:
+    - name: Check confirmation
+      if: github.event.inputs.confirm != 'yes'
+      run: |
+        echo "❌ Deployment canceled. Please confirm by entering 'yes'."
+        exit 1
+
     - name: Checkout repository
       uses: actions/checkout@v3
 
-    - name: Setup SSH
-      uses: webfactory/ssh-agent@v0.7.0
-      with:
-        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+    - name: Install SSH Pass
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y sshpass
 
     - name: Test SSH Connection
       run: |
         mkdir -p ~/.ssh
-        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-        chmod 600 ~/.ssh/id_rsa
         ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
-        ssh -o StrictHostKeyChecking=no -p 22 ${{ secrets.SERVER_USERNAME }}@${{ secrets.SERVER_HOST }} "echo 'SSH connection successful!'"
+        sshpass -p "${{ secrets.SSH_PASSWORD }}" ssh -o StrictHostKeyChecking=no \
+          -p 22 ${{ secrets.SERVER_USERNAME }}@${{ secrets.SERVER_HOST }} \
+          "echo 'SSH connection successful!'"
 
     - name: Configure Server
       uses: appleboy/ssh-action@v0.1.10
       with:
         host: ${{ secrets.SERVER_HOST }}
         username: ${{ secrets.SERVER_USERNAME }}
-        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        password: ${{ secrets.SSH_PASSWORD }}
         port: 22
-        script_timeout: 10m
+        script_timeout: 15m
         script: |
           set -e
           echo "Starting server configuration..."
@@ -67,7 +77,7 @@ jobs:
       with:
         host: ${{ secrets.SERVER_HOST }}
         username: ${{ secrets.SERVER_USERNAME }}
-        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        password: ${{ secrets.SSH_PASSWORD }}
         port: 49009
         script: |
           echo "BBR Status:"
